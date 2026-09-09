@@ -11,6 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # this container; Meson, Ninja and compilers never enter the app slug.
 RUN apt-get update && apt-get install -y \
   build-essential \
+  git \
   meson \
   cmake \
   ninja-build \

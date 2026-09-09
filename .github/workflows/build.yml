@@ -19,23 +19,43 @@ jobs:
           persist-credentials: false
       - name: Check buildpack shell syntax
         run: |
-          for script in bin/compile bin/detect build.sh tests/runtime.test.sh; do
+          for script in bin/compile bin/detect build.sh release.sh tests/runtime.test.sh; do
             bash -n "$script"
           done
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Installer unit tests (mock release downloads)
-        run: node --test tests/installer.test.cjs
+      - name: Installer and release unit tests (mock external calls)
+        run: node --test tests/*.test.cjs
       - name: Build archive and test it on the unmodified Heroku runtime
         run: bash build.sh
       - name: Upload candidate archive (not a published buildpack release)
         uses: actions/upload-artifact@v4
         with:
-          name: vips-8.17.1-heroku-24-candidate
+          name: heroku-24-candidate
           path: build/
           if-no-files-found: error
           retention-days: 14
 
-# Publishing an immutable GitHub release is a separate, reviewed manual action.
-# Neither PRs nor pushes publish/overwrite releases or deploy an app.
+  publish-release:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-buildpack-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: heroku-24-candidate
+          path: build/
+      - name: Publish the tested archive without overwriting an existing release
+        run: bash release.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

@@ -6,8 +6,9 @@ The initial candidate uses **libvips 8.17.1** and **PDFium Chromium 8044**.
 It does not claim support for the upstream fork's old Heroku-18/20/22 targets.
 
 **Review candidate, not deployed:** a reviewed release archive must be published
-in this fork before an app can install it. PR builds only produce temporary CI
-artifacts; they never publish releases, update Heroku, or change dyno sizes.
+in this fork before an app can install it. Merging to `master` automatically
+publishes after build/runtime tests pass. PR builds only produce temporary CI
+artifacts; neither publishing nor testing updates Heroku or changes dyno sizes.
 
 ## What to review
 
@@ -16,7 +17,9 @@ artifacts; they never publish releases, update Heroku, or change dyno sizes.
 - `bin/compile`: downloads and verifies this fork's release archive, caches it
   separately from upstream, installs it, and sets build/runtime library paths.
 - `bin/detect`: supported Heroku stack.
-- `build.sh` and `.github/workflows/build.yml`: maintainer artifact-build process.
+- `build.sh`, `release.sh` and `.github/workflows/build.yml`: artifact build and
+  automatic publication after successful tests on `master`.
+- `package-version`: package revision, independent of the native library version.
 - **Tests only:** `container/Dockerfile.test` and everything under `tests/`.
 
 Meson, Ninja, compilers and source trees exist only in the release builder.
@@ -27,7 +30,7 @@ archive instead of recompiling libvips on every deployment.
 ## Build and test a candidate (maintainers)
 
 ```sh
-node --test tests/installer.test.cjs # Linux/GNU tooling; mocked downloads
+node --test tests/*.test.cjs        # Mocked downloads/publication; installer tests require Linux
 bash build.sh                     # Docker required to build release artifacts
 ```
 
@@ -40,17 +43,28 @@ network access. It installs no test dependencies that could mask missing libs.
 `tests/label.pdf` is a synthetic text-only 4×6-inch PDF, not a carrier label.
 
 For a new native version, update the recipe's versions **and checksums**, the
-installer default, build/test expectations and documentation together. Some
+package revision, build/test expectations and documentation together. Some
 inherited codec source dependencies remain at upstream's versions; APT package
 versions still follow Ubuntu repositories. Passing builds do not establish
 bit-for-bit reproducibility or compatibility with a future Heroku stack.
 
 ## Release and application integration (after review)
 
-Publish the tested archive, checksum and configuration log as an **immutable**
-release `v8.17.1` in this fork. Do not overwrite assets for a cached version.
-`VIPS_VERSION` selects a published `x.y.z` release; it defaults to `8.17.1` and
-does not fall back to upstream if this fork has no matching release.
+Each release change must bump `package-version` (initially `8.17.1-r1`). Increase
+the `rN` revision for packaging fixes even when libvips itself is unchanged.
+`VIPS_VERSION` selects a published `x.y.z-rN` package, defaults to the version in
+that file, and never falls back to upstream.
+
+After a push/merge to `master`, CI builds and tests the archive, then a separate
+job with release-write permission publishes **those same tested artifacts** as
+`v8.17.1-r1`. No separate manual publishing step is needed. PRs and manual test
+dispatches cannot publish. The publisher creates a draft with all three assets,
+then makes it public; an upload failure cannot expose a partial public release.
+
+Existing releases are never overwritten. A rerun after successful publication
+will refuse to recreate that release; likewise, an interrupted upload leaves a
+draft for inspection. Use a new package revision for a new publication. This
+keeps Heroku's version-keyed caches consistent. Publishing is not an app deploy.
 
 For an isolated Heroku-24 Basic canary, pin the reviewed buildpack commit before
 the official Node buildpack. If APT is needed for Canvas or other app libraries,
@@ -64,7 +78,8 @@ its native adapters against compatible libraries and test both import orders.
 Do not combine this with the service PR's in-repo libvips compiler: that PR
 needs simplifying to use this fork before rollout.
 
-Release gates, all still unchecked:
+Validation gates (publication requires the first; application rollout requires
+the remaining checks):
 
 - [ ] Candidate archive build, installer unit tests and bare-runtime tests pass.
 - [ ] Full service canary using Sharp and Canvas on a real Heroku-24 Basic dyno.

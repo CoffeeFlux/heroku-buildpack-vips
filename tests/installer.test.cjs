@@ -14,6 +14,7 @@ function fixture(t) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
   }
   fs.copyFileSync(path.join(__dirname, '../bin/compile'), path.join(root, 'buildpack/bin/compile'));
+  fs.copyFileSync(path.join(__dirname, '../package-version'), path.join(root, 'buildpack/package-version'));
   fs.writeFileSync(path.join(root, 'payload/bin/vips'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'payload/lib/pkgconfig/vips-cpp.pc'), 'prefix=/usr/local/vips\nlibdir=${prefix}/lib\n');
   const archive = path.join(root, 'release/heroku-24.tar.gz');
@@ -41,7 +42,8 @@ cp "$TEST_ROOT/release/\${url##*/}" "$output"
       encoding: 'utf8', env: { ...process.env, STACK: 'heroku-24', TEST_ROOT: root, PATH: path.join(root, 'mock-bin') + ':' + process.env.PATH, ...extraEnv },
     });
   }
-  return { root, archive, run, complete: path.join(root, 'cache/vips-coffeeflux/8.17.1/heroku-24/.complete') };
+  const version = fs.readFileSync(path.join(root, 'buildpack/package-version'), 'utf8').trim();
+  return { root, archive, run, version, complete: path.join(root, 'cache/vips-coffeeflux', version, 'heroku-24/.complete') };
 }
 
 const linuxOnly = { skip: process.platform !== 'linux' }; // Installer uses GNU sed, as Heroku does.
@@ -52,7 +54,7 @@ test('cold install verifies the fork release; repeat build uses its own cache', 
   assert.ok(fs.existsSync(f.complete));
   const urls = fs.readFileSync(path.join(f.root, 'downloads.log'), 'utf8').trim().split('\n');
   assert.equal(urls.length, 2);
-  assert.ok(urls.every(url => url.startsWith('https://github.com/CoffeeFlux/heroku-buildpack-vips/releases/download/v8.17.1/')));
+  assert.ok(urls.every(url => url.startsWith(`https://github.com/CoffeeFlux/heroku-buildpack-vips/releases/download/v${f.version}/`)));
   assert.match(fs.readFileSync(path.join(f.root, 'app/vendor/vips/lib/pkgconfig/vips-cpp.pc'), 'utf8'), /prefix=\$\{pcfiledir\}\/\.\.\/\.\./);
   assert.match(fs.readFileSync(path.join(f.root, 'app/.profile.d/vips.sh'), 'utf8'), /\$HOME\/vendor\/vips\/lib/);
   const cached = f.run('second-app', { FAIL_DOWNLOAD: '1' });

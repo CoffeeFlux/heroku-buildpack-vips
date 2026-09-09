@@ -6,14 +6,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /test
 COPY build/heroku-24.tar.gz build/heroku-24.tar.gz.sha256 ./
 COPY bin ./buildpack/bin
+COPY package-version ./buildpack/package-version
 COPY tests ./tests
 
 # Seed a verified cache, then exercise the actual buildpack installer. Network
 # download/cache-miss handling is covered separately by installer unit tests.
 RUN sha256sum --check heroku-24.tar.gz.sha256 && \
-    mkdir -p /test/build /test/cache/vips-coffeeflux/8.17.1/heroku-24 /test/env && \
-    tar -xzf heroku-24.tar.gz -C /test/cache/vips-coffeeflux/8.17.1/heroku-24 && \
-    touch /test/cache/vips-coffeeflux/8.17.1/heroku-24/.complete && \
+    package_version=$(cat /test/buildpack/package-version) && \
+    cache_path="/test/cache/vips-coffeeflux/$package_version/heroku-24" && \
+    mkdir -p /test/build "$cache_path" /test/env && \
+    tar -xzf heroku-24.tar.gz -C "$cache_path" && \
+    touch "$cache_path/.complete" && \
     STACK=heroku-24 bash /test/buildpack/bin/compile /test/build /test/cache /test/env && \
     mv /test/build /app && chown -R 1000:1000 /app
 

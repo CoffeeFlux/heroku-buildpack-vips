@@ -7,7 +7,7 @@ CACHE_DIR=$(cd "$2" && pwd)
 ENV_DIR=$3
 LP_DIR=$(cd "$(dirname "$0")/.." && pwd)
 repo="https://github.com/CoffeeFlux/heroku-buildpack-vips"
-version="8.17.1"
+version=$(<"$LP_DIR/package-version")
 
 if [[ ${STACK:-} != heroku-24 || $(uname -m) != x86_64 ]]; then
   echo 'vips: this fork requires Heroku-24 x64.' >&2
@@ -16,8 +16,8 @@ fi
 if [[ -f "$ENV_DIR/VIPS_VERSION" ]]; then
   version=$(<"$ENV_DIR/VIPS_VERSION")
 fi
-if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo 'vips: VIPS_VERSION must identify a published x.y.z release.' >&2
+if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+-r[1-9][0-9]*$ ]]; then
+  echo 'vips: VIPS_VERSION must identify a published x.y.z-rN package release.' >&2
   exit 1
 fi
 
