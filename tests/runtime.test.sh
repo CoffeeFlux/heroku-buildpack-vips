@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Release-archive integration tests, executed only by Dockerfile.test.
-set -euo pipefail
+set -euxo pipefail
 
 test "$(vips --vips-version)" = vips-8.17.1
 test ! -e "$HOME/vendor/vips/bin/meson"

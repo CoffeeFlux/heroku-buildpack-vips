@@ -30,6 +30,7 @@ jobs:
       - name: Build archive and test it on the unmodified Heroku runtime
         run: bash build.sh
       - name: Upload candidate archive (not a published buildpack release)
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: heroku-24-candidate
