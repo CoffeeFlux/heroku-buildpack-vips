@@ -1,39 +1,20 @@
-ARG STACK_VERSION
-FROM heroku/heroku:$STACK_VERSION
+# Tests only: validate the release archive and buildpack on the bare runtime.
+# Do not install development/test packages that could hide missing libraries.
+FROM heroku/heroku:24
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+WORKDIR /test
+COPY build/heroku-24.tar.gz build/heroku-24.tar.gz.sha256 ./
+COPY bin ./buildpack/bin
+COPY tests ./tests
 
-ENV DEBIAN_FRONTEND noninteractive
+# Seed a verified cache, then exercise the actual buildpack installer. Network
+# download/cache-miss handling is covered separately by installer unit tests.
+RUN sha256sum --check heroku-24.tar.gz.sha256 && \
+    mkdir -p /test/build /test/cache/vips-coffeeflux/8.17.1/heroku-24 /test/env && \
+    tar -xzf heroku-24.tar.gz -C /test/cache/vips-coffeeflux/8.17.1/heroku-24 && \
+    touch /test/cache/vips-coffeeflux/8.17.1/heroku-24/.complete && \
+    STACK=heroku-24 bash /test/buildpack/bin/compile /test/build /test/cache /test/env && \
+    mv /test/build /app
 
-# install test dependencies
-RUN apt-get update && apt-get install -y \
-  ruby-dev
-
-# install gem dependencies
-RUN gem install ruby-vips
-
-# test our stack to this prefix
-ARG VIPS_PREFIX=/usr/local/vips
-
-# test area
-WORKDIR /usr/local/src
-
-# copy pre-built stack package
-ARG STACK_VERSION
-COPY heroku-$STACK_VERSION.tar.gz .
-
-# extract vips library files
-ARG STACK_VERSION
-RUN mkdir -p $VIPS_PREFIX \
-  && cd $VIPS_PREFIX \
-  && tar xf /usr/local/src/heroku-$STACK_VERSION.tar.gz
-
-# set environment variables
-ENV PATH=$PATH:$VIPS_PREFIX/bin
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$VIPS_PREFIX/lib
-ENV LIBRARY_PATH=$LIBRARY_PATH:$VIPS_PREFIX/lib
-ENV INCLUDE_PATH=$INCLUDE_PATH:$VIPS_PREFIX/include
-ENV CPATH=$CPATH:$VIPS_PREFIX/include
-ENV CPPPATH=$CPPPATH:$VIPS_PREFIX/include
-ENV PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$VIPS_PREFIX/lib/pkgconfig
-
-# test vips installation
-RUN ruby -e 'require "vips"; puts "ruby-vips: libvips #{Vips::LIBRARY_VERSION}"'
+ENV HOME=/app
+CMD ["bash", "-c", "source /app/.profile.d/vips.sh; exec bash /test/tests/runtime.test.sh"]
