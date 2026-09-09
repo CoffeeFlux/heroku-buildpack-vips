@@ -1,10 +1,11 @@
 ARG STACK_VERSION=24
 FROM heroku/heroku:$STACK_VERSION
+USER root
 
 ARG STACK_VERSION
 RUN test "$STACK_VERSION" = 24
 
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Release-builder tools only. The buildpack installs the archive below, not
 # this container; Meson, Ninja and compilers never enter the app slug.

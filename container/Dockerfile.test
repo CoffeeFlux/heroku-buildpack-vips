@@ -1,6 +1,7 @@
 # Tests only: validate the release archive and buildpack on the bare runtime.
 # Do not install development/test packages that could hide missing libraries.
 FROM heroku/heroku:24
+USER root
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /test
 COPY build/heroku-24.tar.gz build/heroku-24.tar.gz.sha256 ./
@@ -14,7 +15,8 @@ RUN sha256sum --check heroku-24.tar.gz.sha256 && \
     tar -xzf heroku-24.tar.gz -C /test/cache/vips-coffeeflux/8.17.1/heroku-24 && \
     touch /test/cache/vips-coffeeflux/8.17.1/heroku-24/.complete && \
     STACK=heroku-24 bash /test/buildpack/bin/compile /test/build /test/cache /test/env && \
-    mv /test/build /app
+    mv /test/build /app && chown -R 1000:1000 /app
 
 ENV HOME=/app
+USER 1000
 CMD ["bash", "-c", "source /app/.profile.d/vips.sh; exec bash /test/tests/runtime.test.sh"]
