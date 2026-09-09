@@ -2,7 +2,7 @@
 # Release-archive integration tests, executed only by Dockerfile.test.
 set -euxo pipefail
 
-test "$(vips --vips-version)" = vips-8.17.1
+test "$(vips --vips-version)" = 'libvips 8.17.1'
 test ! -e "$HOME/vendor/vips/bin/meson"
 test ! -e "$HOME/vendor/vips/bin/ninja"
 if grep -R '/usr/local/vips' "$HOME/vendor/vips/lib/pkgconfig"; then
