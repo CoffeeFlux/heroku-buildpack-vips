@@ -123,9 +123,11 @@ RUN wget ${DE265_URL}/v${DE265_VERSION}/libde265-${DE265_VERSION}.tar.gz \
 
 # build libx265
 ARG X265_VERSION=3.5
-ARG X265_URL=https://bitbucket.org/multicoreware/x265_git/downloads
+ARG X265_URL=https://download.videolan.org/pub/videolan/x265
+ARG X265_SHA256=e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8
 
 RUN wget ${X265_URL}/x265_${X265_VERSION}.tar.gz \
+  && echo "$X265_SHA256  x265_${X265_VERSION}.tar.gz" | sha256sum --check \
   && tar xf x265_${X265_VERSION}.tar.gz \
   && cd x265_${X265_VERSION} \
   && cmake --install-prefix=$VIPS_PREFIX -G "Unix Makefiles" source \
