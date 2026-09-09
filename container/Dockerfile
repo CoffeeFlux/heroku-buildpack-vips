@@ -184,7 +184,7 @@ RUN wget ${VIPS_URL}/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.xz \
   && tar xf vips-${VIPS_VERSION}.tar.xz \
   && cd vips-${VIPS_VERSION} \
   && mkdir -p $VIPS_PREFIX/share/licenses/libvips \
-  && cp COPYING $VIPS_PREFIX/share/licenses/libvips/ \
+  && cp LICENSE $VIPS_PREFIX/share/licenses/libvips/ \
   && meson setup build --prefix=${VIPS_PREFIX} --libdir=lib --buildtype=release \
        -Dpdfium=enabled -Dpoppler=disabled -Dmodules=disabled -Dintrospection=disabled -Dexamples=false \
   && cd build \
