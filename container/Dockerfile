@@ -1,19 +1,23 @@
-ARG STACK_VERSION
+ARG STACK_VERSION=24
 FROM heroku/heroku:$STACK_VERSION
+USER root
 
-ENV DEBIAN_FRONTEND noninteractive
+ARG STACK_VERSION
+RUN test "$STACK_VERSION" = 24
 
-# useful build tools ... we need gtk-doc to build orc, since they don't ship
-# pre-baked tarballs
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Release-builder tools only. The buildpack installs the archive below, not
+# this container; Meson, Ninja and compilers never enter the app slug.
 RUN apt-get update && apt-get install -y \
   build-essential \
-  python3-pip \
+  git \
+  meson \
+  cmake \
   ninja-build \
   intltool \
   libtool \
   pkg-config
-
-RUN pip3 install meson
 
 # heroku buildpacks include some libraries, like tiff and jpeg, as part of the
 # run-time platform, and we want to use those libs if we can
@@ -22,14 +26,14 @@ RUN pip3 install meson
 #
 # libgsf needs libxml2
 RUN apt-get update && apt-get install -y \
-  glib-2.0-dev \
+  libglib2.0-dev \
   libexpat-dev \
   libpango1.0-dev \
   librsvg2-dev \
   libjpeg-turbo8-dev \
   libopenjp2-7-dev \
   libopenexr-dev \
-  libtiff5-dev \
+  libtiff-dev \
   libexif-dev \
   liblcms2-dev \
   libxml2-dev \
@@ -46,13 +50,6 @@ ENV PKG_CONFIG_PATH=$VIPS_PREFIX/lib/pkgconfig
 # build area
 WORKDIR /usr/local/src
 
-# install cmake
-ARG CMAKE_VERSION=3.25.1
-ARG CMAKE_URL=https://github.com/Kitware/CMake/releases/download
-
-RUN wget ${CMAKE_URL}/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz \
-  && tar xf cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz --strip-components=1 -C /usr/local
-
 # build liborc
 ARG ORC_VERSION=0.4.34
 ARG ORC_URL=https://gstreamer.freedesktop.org/src/orc
@@ -67,7 +64,7 @@ RUN wget ${ORC_URL}/orc-$ORC_VERSION.tar.xz \
 
 # build libgsf
 ARG GSF_VERSION=1.14.50
-ARG GSF_URL=http://ftp.gnome.org/pub/GNOME/sources/libgsf
+ARG GSF_URL=https://download.gnome.org/sources/libgsf
 
 RUN wget ${GSF_URL}/${GSF_VERSION%.*}/libgsf-$GSF_VERSION.tar.xz \
   && tar xf libgsf-${GSF_VERSION}.tar.xz \
@@ -77,7 +74,7 @@ RUN wget ${GSF_URL}/${GSF_VERSION%.*}/libgsf-$GSF_VERSION.tar.xz \
   && make install
 
 # build libimagequant
-ARG IMAGEQUANT_VERSION=main
+ARG IMAGEQUANT_VERSION=ce5fdeb1ccd9db288950faa21fd09c42c0a59bbb
 ARG IMAGEQUANT_URL=https://github.com/lovell/libimagequant
 
 RUN git clone $IMAGEQUANT_URL \
@@ -126,9 +123,11 @@ RUN wget ${DE265_URL}/v${DE265_VERSION}/libde265-${DE265_VERSION}.tar.gz \
 
 # build libx265
 ARG X265_VERSION=3.5
-ARG X265_URL=https://bitbucket.org/multicoreware/x265_git/downloads
+ARG X265_URL=https://download.videolan.org/pub/videolan/x265
+ARG X265_SHA256=e70a3335cacacbba0b3a20ec6fecd6783932288ebc8163ad74bcc9606477cae8
 
 RUN wget ${X265_URL}/x265_${X265_VERSION}.tar.gz \
+  && echo "$X265_SHA256  x265_${X265_VERSION}.tar.gz" | sha256sum --check \
   && tar xf x265_${X265_VERSION}.tar.gz \
   && cd x265_${X265_VERSION} \
   && cmake --install-prefix=$VIPS_PREFIX -G "Unix Makefiles" source \
@@ -147,15 +146,19 @@ RUN wget ${HEIF_URL}/v${HEIF_VERSION}/libheif-${HEIF_VERSION}.tar.gz \
   && make install
 
 # build libpdfium
-ARG PDFIUM_VERSION=5893
-ARG PDFIUM_URL=https://github.com/bblanchon/pdfium-binaries/releases/latest/download
+ARG PDFIUM_VERSION=8044
+ARG PDFIUM_SHA256=eb142f416aed3a72fc5a02dbd5884868a16cb99dc0cf53e6bdd64afbf67b05f4
+ARG PDFIUM_URL=https://github.com/bblanchon/pdfium-binaries/releases/download/chromium
 
-RUN wget $PDFIUM_URL/pdfium-linux-x64.tgz \
+RUN wget $PDFIUM_URL/$PDFIUM_VERSION/pdfium-linux-x64.tgz \
+  && echo "$PDFIUM_SHA256  pdfium-linux-x64.tgz" | sha256sum --check \
   && mkdir pdfium \
   && cd pdfium \
   && tar xf ../pdfium-linux-x64.tgz \
   && cp lib/* $VIPS_PREFIX/lib \
-  && cp -r include/* $VIPS_PREFIX/include
+  && cp -r include/* $VIPS_PREFIX/include \
+  && mkdir -p $VIPS_PREFIX/share/licenses/pdfium \
+  && cp -r LICENSE licenses $VIPS_PREFIX/share/licenses/pdfium/
 
 # make a pdfium.pc file libvips can use
 RUN mkdir -p $VIPS_PREFIX/lib/pkgconfig \
@@ -172,13 +175,18 @@ RUN mkdir -p $VIPS_PREFIX/lib/pkgconfig \
   && echo "Cflags: -I\${includedir}" >> pdfium.pc
 
 # build libvips
-ARG VIPS_VERSION=8.14.4
-ARG VIPS_URL=https://github.com/libvips/libvips/archive/refs/tags
+ARG VIPS_VERSION=8.17.1
+ARG VIPS_SHA256=4d8c3325922c5300253d7594507a8f1d3caf8eed70dfb66cc7eb2cbed65bb5ca
+ARG VIPS_URL=https://github.com/libvips/libvips/releases/download
 
-RUN wget ${VIPS_URL}/v${VIPS_VERSION}/v${VIPS_VERSION}.tar.gz \
-  && tar xf v${VIPS_VERSION}.tar.gz \
-  && cd libvips-${VIPS_VERSION} \
-  && meson -Dintrospection=false build --prefix=${VIPS_PREFIX} --libdir=lib --buildtype=release \
+RUN wget ${VIPS_URL}/v${VIPS_VERSION}/vips-${VIPS_VERSION}.tar.xz \
+  && echo "$VIPS_SHA256  vips-${VIPS_VERSION}.tar.xz" | sha256sum --check \
+  && tar xf vips-${VIPS_VERSION}.tar.xz \
+  && cd vips-${VIPS_VERSION} \
+  && mkdir -p $VIPS_PREFIX/share/licenses/libvips \
+  && cp LICENSE $VIPS_PREFIX/share/licenses/libvips/ \
+  && meson setup build --prefix=${VIPS_PREFIX} --libdir=lib --buildtype=release \
+       -Dpdfium=enabled -Dpoppler=disabled -Dmodules=disabled -Dintrospection=disabled -Dexamples=false \
   && cd build \
   && ninja \
   && ninja install
@@ -194,7 +202,9 @@ ARG STACK_VERSION
 RUN cd $VIPS_PREFIX \
   && rm -rf build \
   && mkdir build \
-  && tar czf "build/heroku-${STACK_VERSION}.tar.gz" bin include lib
+  && tar czf "build/heroku-${STACK_VERSION}.tar.gz" bin include lib share/licenses \
+  && cd build \
+  && sha256sum "heroku-${STACK_VERSION}.tar.gz" > "heroku-${STACK_VERSION}.tar.gz.sha256"
 
 # export config logs
 ARG STACK_VERSION

@@ -1,62 +1,62 @@
----
-name: Build
-run-name: Build libvips v${{ github.event.inputs.version }}
+name: Build and test release archive
 
 on:
+  pull_request:
+  push:
+    branches: [master]
   workflow_dispatch:
-    inputs:
-      version:
-        description: VIPS version
-        required: true
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        stack: [18, 20, 22]
-
-    name: heroku-${{ matrix.stack }}
-    runs-on: ubuntu-latest
-
-    env:
-      vips_image: libvips/heroku-${{ matrix.stack }}:${{ github.event.inputs.version }}
-      test_image: libvips/heroku-test-${{ matrix.stack }}:${{ github.event.inputs.version }}
-
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Build package
-        uses: docker/build-push-action@v4
+      - uses: actions/checkout@v4
         with:
-          push: false
-          file: container/Dockerfile
-          tags: ${{ env.vips_image }}
-          build-args: |
-            VIPS_VERSION=${{ github.event.inputs.version }}
-            STACK_VERSION=${{ matrix.stack }}
-
-      - name: Extract assets
-        id: extract
-        uses: shrink/actions-docker-extract@v2
+          persist-credentials: false
+      - name: Check buildpack shell syntax
+        run: |
+          for script in bin/compile bin/detect build.sh release.sh tests/runtime.test.sh; do
+            bash -n "$script"
+          done
+      - uses: actions/setup-node@v4
         with:
-          image: ${{ env.vips_image }}
-          path: usr/local/vips/build/.
-
-      - name: Test package
-        uses: docker/build-push-action@v3
+          node-version: '24'
+      - name: Installer and release unit tests (mock external calls)
+        run: node --test tests/*.test.cjs
+      - name: Build archive and test it on the unmodified Heroku runtime
+        run: bash build.sh
+      - name: Upload candidate archive (not a published buildpack release)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
         with:
-          push: false
-          file: container/Dockerfile.test
-          tags: ${{ env.test_image }}
-          context: ${{ steps.extract.outputs.destination }}
-          build-args: STACK_VERSION=${{ matrix.stack }}
+          name: heroku-24-candidate
+          path: build/
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Upload assets
-        if: ${{ !env.ACT }}
-        uses: svenstaro/upload-release-action@v2
+  publish-release:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-buildpack-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
         with:
-          file_glob: true
-          overwrite: true
-          file: ${{ steps.extract.outputs.destination }}/*
-          tag: v${{ github.event.inputs.version }}
-          body: Heroku binaries for libvips v${{ github.event.inputs.version }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: heroku-24-candidate
+          path: build/
+      - name: Publish the tested archive without overwriting an existing release
+        run: bash release.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
